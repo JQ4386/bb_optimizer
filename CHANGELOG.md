@@ -24,6 +24,8 @@ All notable changes to this project will be documented in this file.
 - Control Panel: Refactored layout using Flexbox to position controls on the left and chart placeholder on the right.
 - Control Panel: Adjusted width split between controls and chart placeholder.
 - Control Panel: Ensured button text does not wrap (`whiteSpace: 'nowrap'`).
+- **BountyBoard Layout**: Refactored layout from MUI Grid to MUI Box with Flexbox (`components/BountyBoard.tsx`).
+- **BountyBoard Layout**: Adjusted Flexbox item widths to fit more items per row (`components/BountyBoard.tsx`).
 - `BountySlot`: Adjusted layout (vertical) and styling (opacity) based on feedback.
 - `BountySlot`: Adjusted background tint opacity for better visibility.
 - `BountyBoard`: Updated grid sizing multiple times to accommodate `BountySlot` changes.
@@ -32,11 +34,11 @@ All notable changes to this project will be documented in this file.
 - Layout: Adjusted maximum width constraints (`page.tsx`) based on feedback.
 
 ### Fixed
+- **Build Error**: Bypassed MUI Grid type errors by replacing Grid with Box/Flexbox in `BountyBoard.tsx`.
 - **Icons**: Resolved 404 errors for icons by moving `public/icons` to the correct project subdirectory.
 - **Evaluation Logic**: Corrected DP gain calculation to only apply refresh cost when slots are actually refreshed.
 - **Evaluation Logic**: Corrected handling of the final step when only one slot remains.
 - **Locking**: Ensured auto-lock triggers correctly based on the recommended refresh action in `handleEvaluate`.
-- **Build Error**: Resolved MUI Grid v1/v2 type errors in `BountyBoard.tsx`.
 - Control Panel: Addressed layout issues ensuring chart placeholder appears to the right, not underneath, on smaller screens (using Flexbox).
 
 ### Removed
