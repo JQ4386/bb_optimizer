@@ -4,19 +4,22 @@ A Next.js application using MUI to help optimize bounty board refreshes in [Game
 
 ## Features
 
-*   Calculates the expected value of refreshing the bounty board based on configurable resource values.
-*   Suggests which quests to lock before refreshing.
+*   Calculates the optimal refresh strategy using **Iterative Dynamic Programming** considering multi-step expected value, based on configurable resource values.
+*   Suggests which quests to lock before refreshing (automatically applied if refreshing).
+*   **Manually define/redefine individual quest slots.**
 *   Visualizes quest details and values.
-*   Toggleable auto-lock for suggested quests.
-*   Placeholder for refresh value trend chart.
+*   Tracks total value gained since last reset, accounting for refresh costs.
+*   Displays refresh value trend chart.
 *   Customizable theme.
+*   **Built-in export** of the refresh value trend chart (**PNG** format).
 
 ## Getting Started
 
 1.  **Clone the repository:**
     ```bash
     git clone [repository-url]
-    cd bb_optimizer
+    # Navigate into the project directory created by the clone
+    cd bb_optimizer 
     ```
 2.  **Install dependencies:**
     ```bash
