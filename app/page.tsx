@@ -295,42 +295,60 @@ export default function Home() {
       setDefiningSlotEntryId(null);
   };
 
-  // Confirm needs to find the specific entry based on selection, not manual quantity
-  const handleConfirmDefinition = (resourceType: ResourceType, rarity: string /* removed quantity */) => {
-      if (!definingSlotEntryId) return; 
+  // Updated to correctly modify the slot based on the new definition
+  const handleConfirmDefinition = (resourceType: ResourceType, rarity: string) => {
+    if (!definingSlotEntryId) {
+        console.error("Cannot confirm definition: No slot ID defined.");
+        handleCloseDefinitionDialog(); // Close dialog even on error
+        return;
+    }
 
-      // Use the map to get the correct abbreviation for the ID
-      const resourceAbbreviation = resourceIdMap[resourceType];
-      if (!resourceAbbreviation) {
-          console.error(`Unknown resource type abbreviation for: ${resourceType}`);
-          handleCloseDefinitionDialog();
-          return;
-      }
+    // Construct the expected ID prefix (e.g., L.Gold, M.Dust)
+    // Use the mapping for IDs (e.g., Stones -> Stone, Diamonds -> Dia)
+    const idPrefix = `${rarity}.${resourceIdMap[resourceType]}`;
 
-      const baseEntryId = `${rarity}.${resourceAbbreviation}`; // Construct ID with abbreviation
-      const templateEntry = bountyEntries.find(entry => entry.id === baseEntryId);
+    // Find the corresponding BountyEntry from the master list
+    const targetBountyEntry = bountyEntries.find(entry => entry.id === idPrefix);
 
-      if (!templateEntry) {
-          console.error(`Unknown resource template for: ${baseEntryId}`);
-          handleCloseDefinitionDialog();
-          return;
-      }
+    if (!targetBountyEntry) {
+        console.error(`Cannot find bounty definition for ID prefix: ${idPrefix}`);
+        // Optionally provide feedback to the user here
+        handleCloseDefinitionDialog(); // Close dialog if definition not found
+        return;
+    }
+    
+    console.log(`Redefining slot ${definingSlotEntryId} to ${targetBountyEntry.id}`);
 
+    setSlots(currentSlots => {
       const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
-      const newEntryData: BountyEntry = {
-          ...templateEntry, 
-          id: definingSlotEntryId, 
-      };
-      const newValue = newEntryData.qty * quantityMultiplier * (valuation.perUnit[newEntryData.type] || 0);
+      return currentSlots.map(slot => {
+          // Find the slot we are redefining
+          if (slot.entry.id === definingSlotEntryId) {
+            // Create a *new* entry object based on the found definition
+            const newEntry: BountyEntry = {
+                // Use the ID from the master list (e.g., "L.Gold")
+                id: targetBountyEntry.id, 
+                type: targetBountyEntry.type, // Use type from master list
+                qty: targetBountyEntry.qty, // Use qty from master list
+                pct: targetBountyEntry.pct // Use pct from master list (though might not be needed here)
+            };
+            
+            // Recalculate value based on the new entry's quantity and type
+            const newValue = newEntry.qty * quantityMultiplier * (valuation.perUnit[newEntry.type] || 0);
 
-      setSlots(currentSlots => 
-          currentSlots.map(slot => 
-              slot.entry.id === definingSlotEntryId 
-              ? { ...slot, entry: newEntryData, value: newValue, locked: false } 
-              : slot
-          )
-      );
-      handleCloseDefinitionDialog();
+            console.log("Updated Slot:", { ...slot, entry: newEntry, value: newValue });
+            // Return the updated slot
+            return { ...slot, entry: newEntry, value: newValue };
+          }
+          // Return other slots unchanged
+          return slot;
+      });
+    });
+
+    handleCloseDefinitionDialog(); // Close the dialog after successful update
+    setNeedsRecalculationAfterLock(false); // Reset eval state after manual change
+    setEvaluationResult(null);
+    setSuggestedLockIds([]);
   };
 
   const totalCurrentValue = slots.reduce((sum, slot) => sum + slot.value, 0);
