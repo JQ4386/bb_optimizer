@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Control Panel: Added toggle switch for auto-locking suggested quests after computation.
 - `README.md`: Initial project documentation.
 - `CHANGELOG.md`: This changelog file.
+- **Deployment**: Added Firebase configuration (`firebase.json`, `.firebaserc`).
 
 ### Changed
 - **Refresh Strategy**: Refactored `computeOptimalRefresh` to return immediate action/gain.
@@ -32,6 +33,7 @@ All notable changes to this project will be documented in this file.
 - Theme: Updated font to Quicksand across the application.
 - Theme: Applied primary color to subsection titles (`page.tsx`).
 - Layout: Adjusted maximum width constraints (`page.tsx`) based on feedback.
+- **Build**: Configured Next.js for static export (`next.config.ts`).
 
 ### Fixed
 - **Build Error**: Bypassed MUI Grid type errors by replacing Grid with Box/Flexbox in `BountyBoard.tsx`.
@@ -40,7 +42,9 @@ All notable changes to this project will be documented in this file.
 - **Evaluation Logic**: Corrected handling of the final step when only one slot remains.
 - **Locking**: Ensured auto-lock triggers correctly based on the recommended refresh action in `handleEvaluate`.
 - Control Panel: Addressed layout issues ensuring chart placeholder appears to the right, not underneath, on smaller screens (using Flexbox).
+- **Deployment**: Corrected Firebase Hosting public directory to `out` and removed SPA rewrite (`firebase.json`).
 
 ### Removed
+- **Deployment**: Removed Netlify configuration files (`netlify.toml`, `.netlify/`).
 - Previous complex Grid layouts in `Controls.tsx` and `BountyBoard.tsx` that caused persistent linter errors (though errors may still exist). 
 - Single-step Monte Carlo simulation from `lib/strategy.ts`. 
