@@ -3,6 +3,7 @@
 import React from 'react';
 import { Card, Typography, CardActionArea, Box } from '@mui/material'; 
 import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 // Import ONLY types from bountyData
 import { Slot, BountyEntry, ResourceType } from '../lib/bountyData';
 import { alpha } from '@mui/material/styles';
@@ -10,6 +11,7 @@ import { alpha } from '@mui/material/styles';
 interface BountySlotProps {
   slot: Slot;
   onSlotClick: (entryId: string) => void; 
+  onLockClick: (entryId: string, locked: boolean) => void;
   highlight?: boolean; 
 }
 
@@ -39,10 +41,19 @@ const resourceIconPaths: Record<ResourceType, string> = {
   Shards: '/icons/shard.png',
 };
 
-const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, highlight }) => {
+const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, onLockClick, highlight }) => {
+  
+  const [locked, setLocked] = React.useState<boolean>(slot.locked);
+  
   const handleClick = () => {
     onSlotClick(slot.entry.id);
   };
+
+  const handleLock = (e: React.MouseEvent) => {
+    setLocked((prev) => !prev);
+    slot.locked = !locked;
+    onLockClick(slot.entry.id, !locked);
+  }
 
   // Extract rarity prefix from the potentially redefined entry ID
   const rarityPrefix = slot.entry.id.split('.')[0] || 'default'; 
@@ -53,7 +64,7 @@ const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, highlight })
 
   return (
     <Card 
-      elevation={slot.locked ? 1 : 3} 
+      elevation={locked ? 1 : 3} 
       sx={{
         position: 'relative',
         backgroundColor: colors.bg, // Background updates based on prefix
@@ -61,7 +72,7 @@ const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, highlight })
           ? '2px solid yellow' 
           : `1px solid ${colors.border}`, // Border updates based on prefix
         borderRadius: '8px',
-        opacity: slot.locked ? 0.7 : 1, // Opacity based on lock status only
+        opacity: locked ? 0.7 : 1, // Opacity based on lock status only
         color: 'text.primary', 
         display: 'flex', 
         height: '100%', // Allow grid to control height if needed
@@ -115,15 +126,27 @@ const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, highlight })
       </CardActionArea>
       
       {/* Lock icon based on lock status */}
-      {slot.locked && (
+      {locked && (
           <LockIcon 
             sx={{ 
               position: 'absolute', top: 8, right: 8, 
               color: 'error.dark', fontSize: '1.3rem', 
               backgroundColor: alpha("#fff", 0.3), borderRadius: '50%', padding: '1px'
             }} 
+            onClick={handleLock}
           />
-        )}
+      )}
+
+      {!locked && (
+        <LockOpenIcon 
+            sx={{ 
+              position: 'absolute', top: 8, right: 8, 
+              color: 'success.dark', fontSize: '1.3rem', 
+              backgroundColor: alpha("#fff", 0.3), borderRadius: '50%', padding: '1px'
+            }} 
+            onClick={handleLock}
+        />
+      )}
     </Card>
   );
 };
