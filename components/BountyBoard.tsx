@@ -8,10 +8,11 @@ import BountySlot from './BountySlot';
 interface BountyBoardProps {
   slots: Slot[];
   onSlotClick: (entryId: string) => void;
+  onSlotLock: (entryId: string, locked: boolean) => void;
   suggestedLockIds?: string[];
 }
 
-const BountyBoard: React.FC<BountyBoardProps> = ({ slots, onSlotClick, suggestedLockIds = [] }) => {
+const BountyBoard: React.FC<BountyBoardProps> = ({ slots, onSlotClick, onSlotLock, suggestedLockIds = [] }) => {
   return (
     <Box sx={{ flexGrow: 1, my: 2 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
@@ -29,6 +30,7 @@ const BountyBoard: React.FC<BountyBoardProps> = ({ slots, onSlotClick, suggested
             <BountySlot 
               slot={slot} 
               onSlotClick={onSlotClick} 
+              onLockClick={onSlotLock}
               highlight={suggestedLockIds.includes(slot.entry.id)}
             />
           </Box>

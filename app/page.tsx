@@ -284,6 +284,20 @@ export default function Home() {
       // Maybe call handleReset() or a dedicated recalculate function?
   };
 
+  // Handler for locking toggle
+  const handleSlotLock = (entryId: string, isLocked: boolean) => {
+
+    // Updates the slots locked status based on the entryId
+    setSlots(currentSlots => {
+      return currentSlots.map(slot => {
+        if (slot.entry.id === entryId) {
+          return { ...slot, locked: isLocked };
+        }
+        return slot;
+      });
+    });
+  };
+
   // --- Dialog Handlers (Adjusted for Redefine) ---
   const handleOpenRedefineDialog = (entryId: string) => {
       setDefiningSlotEntryId(entryId); // Store entry.id
@@ -400,6 +414,7 @@ export default function Home() {
           <BountyBoard 
            slots={slots} 
            onSlotClick={handleOpenRedefineDialog} 
+           onSlotLock={handleSlotLock}
            suggestedLockIds={suggestedLockIds}
           />
        </Paper>
