@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React from 'react';
 import { Box, Button, Switch, FormControlLabel, Typography, Paper, IconButton } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LockIcon from '@mui/icons-material/Lock'; // Keep for potential future use, but toggle replaces button
@@ -54,8 +54,6 @@ const Controls: React.FC<ControlsProps> = ({
   // Define gap value for consistent spacing calculation
   const gapValue = 24; // Corresponds to theme.spacing(3)
 
-  const chartRef = useRef<HTMLDivElement>(null);
-
   // Map history data to plain objects for the chart dataset
   const chartDataset = evaluationHistory.map(point => ({
     step: point.step,
@@ -63,54 +61,154 @@ const Controls: React.FC<ControlsProps> = ({
     currentValue: point.currentValue
   }));
 
-  const handleExport = () => {
-    if (!chartRef.current) {
-        console.error("Chart container ref not found");
-        return;
+  const handleExport = () => { // No longer needs async
+    if (chartDataset.length === 0) {
+      console.error("No data to export.");
+      return;
     }
 
-    const svgElement = chartRef.current.querySelector('svg');
-    if (!svgElement) {
-        console.error("SVG element not found within chart container");
-        return;
+    const canvasWidth = 800; 
+    const canvasHeight = 450; // Increased height for title/text
+    const padding = 50; // Padding around the chart area
+    const titleHeight = 30;
+    const bottomTextHeight = 30;
+    const chartHeight = canvasHeight - padding * 2 - titleHeight - bottomTextHeight;
+    const chartWidth = canvasWidth - padding * 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      console.error("Could not get canvas context");
+      return;
     }
 
-    // Clone the SVG to avoid modifying the original
-    const svgClone = svgElement.cloneNode(true) as SVGSVGElement;
+    // --- Drawing Logic --- 
+
+    // 1. Background
+    ctx.fillStyle = '#ffffff'; // White background
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // 2. Title
+    ctx.fillStyle = '#333'; // Dark text
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Refresh Value Trend', canvasWidth / 2, padding); // Draw title near top
+
+    // 3. Determine Data Range
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
+    chartDataset.forEach(p => {
+      minX = Math.min(minX, p.step);
+      maxX = Math.max(maxX, p.step);
+      minY = Math.min(minY, p.expectedValue, p.currentValue);
+      maxY = Math.max(maxY, p.expectedValue, p.currentValue);
+    });
     
-    // Get dimensions for placing text
-    const viewBox = svgClone.viewBox.baseVal;
-    const width = viewBox.width || parseFloat(svgClone.getAttribute('width') || '600');
-    const height = viewBox.height || parseFloat(svgClone.getAttribute('height') || '250');
-    const padding = 10;
+    // Add some buffer to Y range if min/max are too close or zero
+    if (maxY === minY) {
+        maxY += 10; 
+        minY = Math.max(0, minY - 10); // Ensure minY is not negative unless data is
+    } else {
+        const range = maxY - minY;
+        maxY += range * 0.1; // Add 10% padding top
+        minY = Math.max(0, minY - range * 0.1); // Add 10% padding bottom (but not below 0)
+    }
+    // Ensure X range has some width if only one data point
+    if (maxX === minX) {
+        maxX += 1;
+    }
 
-    // Create a new text element for the extra value
-    const textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    textElement.setAttribute("x", (width / 2).toString()); // Center horizontally
-    textElement.setAttribute("y", (height - padding).toString()); // Position near bottom
-    textElement.setAttribute("dominant-baseline", "auto");
-    textElement.setAttribute("text-anchor", "middle");
-    textElement.setAttribute("fill", "#555"); // Text color
-    textElement.setAttribute("font-size", "10");
-    textElement.textContent = `Total Extra Value (Since Reset): ${totalExtraValue.toFixed(2)}`;
-    
-    // Append the text to the cloned SVG
-    svgClone.appendChild(textElement);
+    const rangeX = maxX - minX;
+    const rangeY = maxY - minY;
 
-    // Adjust viewbox height slightly if needed to ensure text fits
-    svgClone.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${width} ${height + padding}`);
+    // Helper to map data point to canvas coordinates
+    const mapToCanvas = (point: { step: number, value: number }) => {
+      const x = padding + ((point.step - minX) / rangeX) * chartWidth;
+      // Y is inverted because canvas origin (0,0) is top-left
+      const y = padding + titleHeight + chartHeight - ((point.value - minY) / rangeY) * chartHeight;
+      return { x, y };
+    };
 
-    // Serialize the modified SVG
-    const svgString = new XMLSerializer().serializeToString(svgClone);
-    const blob = new Blob([svgString], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
+    // 4. Draw Axes
+    ctx.strokeStyle = '#ccc'; // Light grey for axes
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    // Y Axis
+    ctx.moveTo(padding, padding + titleHeight);
+    ctx.lineTo(padding, padding + titleHeight + chartHeight);
+    // X Axis
+    ctx.moveTo(padding, padding + titleHeight + chartHeight);
+    ctx.lineTo(padding + chartWidth, padding + titleHeight + chartHeight);
+    ctx.stroke();
+
+    // Draw Axis Labels/Ticks (Simplified)
+    ctx.fillStyle = '#666'; // Medium grey text
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(maxX.toString(), padding + chartWidth, padding + titleHeight + chartHeight + 5);
+    ctx.fillText(minX.toString(), padding, padding + titleHeight + chartHeight + 5);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(maxY.toFixed(0), padding - 5, padding + titleHeight);
+    ctx.fillText(minY.toFixed(0), padding - 5, padding + titleHeight + chartHeight);
+
+    // 5. Draw Data Lines
+    const drawLine = (dataKey: 'expectedValue' | 'currentValue', color: string) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      chartDataset.forEach((point, index) => {
+        const canvasPoint = mapToCanvas({ step: point.step, value: point[dataKey] });
+        if (index === 0) {
+          ctx.moveTo(canvasPoint.x, canvasPoint.y);
+        } else {
+          ctx.lineTo(canvasPoint.x, canvasPoint.y);
+        }
+      });
+      ctx.stroke();
+    };
+
+    drawLine('expectedValue', '#9c27b0'); // Purple
+    drawLine('currentValue', '#2e7d32'); // Green
+
+    // 6. Draw Legend (Simple)
+    const legendX = padding + chartWidth - 150;
+    const legendY = padding + titleHeight + 10;
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    ctx.fillStyle = '#9c27b0'; // Purple
+    ctx.fillRect(legendX, legendY, 15, 10);
+    ctx.fillStyle = '#333';
+    ctx.fillText('Expected (Post-Refresh)', legendX + 20, legendY);
+
+    ctx.fillStyle = '#2e7d32'; // Green
+    ctx.fillRect(legendX, legendY + 15, 15, 10);
+    ctx.fillStyle = '#333';
+    ctx.fillText('Actual (Pre-Refresh)', legendX + 20, legendY + 15);
+
+    // 7. Draw Bottom Text
+    ctx.fillStyle = '#555'; // Text color
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    const bottomText = `Total Extra Value (Since Reset): ${totalExtraValue.toFixed(2)}`;
+    ctx.fillText(bottomText, canvasWidth / 2, canvasHeight - padding / 2);
+
+    // --- Export Logic --- 
+    const pngUrl = canvas.toDataURL('image/png');
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'bounty-chart-export.svg';
+    a.href = pngUrl;
+    a.download = 'bounty-chart-export.png';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -231,7 +329,7 @@ const Controls: React.FC<ControlsProps> = ({
                   right: 8, // Adjust as needed
                   zIndex: 1 // Ensure it's above chart elements if necessary
               }}
-              title="Export Chart as SVG"
+              title="Export Chart as PNG"
             >
               <DownloadIcon fontSize="small" />
             </IconButton>
@@ -240,7 +338,7 @@ const Controls: React.FC<ControlsProps> = ({
             Refresh Value Trend
           </Typography>
           {/* Actual Line Chart */}
-          <Box ref={chartRef} sx={{ flexGrow: 1, width: '100%', height: '100%' }}>
+          <Box sx={{ flexGrow: 1, width: '100%', height: '100%' }}>
             {chartDataset.length > 0 ? (
               <LineChart
                 dataset={chartDataset}
