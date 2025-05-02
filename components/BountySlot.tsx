@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, {useEffect} from 'react';
 import { Card, Typography, CardActionArea, Box } from '@mui/material'; 
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
@@ -54,6 +54,10 @@ const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, onLockClick,
     slot.locked = !locked;
     onLockClick(slot.entry.id, !locked);
   }
+
+  useEffect(() => {
+    setLocked(slot.locked);
+  }, [slot.locked]);
 
   // Extract rarity prefix from the potentially redefined entry ID
   const rarityPrefix = slot.entry.id.split('.')[0] || 'default'; 
@@ -135,7 +139,7 @@ const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, onLockClick,
             }} 
             onClick={handleLock}
           />
-      )}
+        )}
 
       {!locked && (
         <LockOpenIcon 
