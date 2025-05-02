@@ -1,63 +1,58 @@
-// Assume Type definitions (ResourceType, BountyEntry, etc.) are here or imported
-// It's best practice to have these defined or imported at the top.
+export type ResourceType = 
+  | 'Gold' | 'Dust' | 'Stones' 
+  | 'Diamonds' | 'Juice' | 'Shards';
 
-// Example (replace with actual definitions if they are needed here):
-export type ResourceType = 'Gold' | 'Dust' | 'Stones' | 'Diamonds' | 'Juice' | 'Shards';
-
-// Define BountyEntry based on usage in other files
 export interface BountyEntry {
-  id: string;
-  type: ResourceType;
-  qty: number;
-  pct: number; // Assuming 'pct' (percentage/probability) exists based on getRandomBountyEntry
-  // Add other potential fields if known
+  id:   string;        // e.g. "L.Gold"
+  type: ResourceType;  // e.g. "Gold"
+  qty:  number;        // e.g. 237000
+  pct:  number;        // e.g. 0.306818
 }
 
-// Define Slot based on usage in other files
 export interface Slot {
   entry: BountyEntry;
-  value: number;
+  value: number;       // = qty * per-unit value
   locked: boolean;
 }
 
-// Define Valuation based on usage
 export interface Valuation {
-  perUnit: Record<ResourceType, number>;
+  perUnit:   Record<ResourceType, number>;
   perInvest: Record<ResourceType, number>;
 }
 
-// Existing data structures like investBase, bountyEntries...
-export const investBase: Partial<Record<ResourceType, number>> = {
-    Gold: 1, Dust: 1, Stones: 1, Diamonds: 1, Juice: 1, Shards: 1
-}; // Placeholder
-export const bountyEntries: BountyEntry[] = [
-    { id: 'L.Gold', type: 'Gold', qty: 100, pct: 1 }, 
-    // ... add other actual entries ...
-]; // Placeholder
-
-// Resource type list (used in dialog)
-const resourceTypes: ResourceType[] = ['Gold', 'Dust', 'Stones', 'Diamonds', 'Juice', 'Shards'];
-
-// Map for custom resource icon paths
-const resourceIconPaths: Record<ResourceType, string> = {
-  Gold: '/icons/gold.png',
-  Dust: '/icons/dust.png',
-  Stones: '/icons/stone.png', 
-  Diamonds: '/icons/diamonds.png',
-  Juice: '/icons/juice.png',
-  Shards: '/icons/shards.png',
-}; 
-
-// --- Exports --- 
-export { 
-    ResourceType, 
-    BountyEntry, 
-    Slot, 
-    Valuation 
+// Base investment cost per unit for calculating perInvest from perUnit
+// These are example values and should be adjusted based on actual game data
+export const investBase: Record<ResourceType, number> = {
+  Gold: 10000,     // e.g., 10k gold investment
+  Dust: 100,       // e.g., 100 dust investment
+  Stones: 1,       // e.g., 1 stone investment
+  Diamonds: 10,     // e.g., 10 diamond investment
+  Juice: 50,       // e.g., 50 juice investment
+  Shards: 1,       // e.g., 1 shard investment
 };
-export { 
-    investBase, 
-    bountyEntries, 
-    resourceTypes, 
-    resourceIconPaths 
-}; 
+
+// Actual Bounty Data
+export const bountyEntries: BountyEntry[] = [
+  { id: "L.Gold", type: "Gold", qty: 237000, pct: 0.306818 },
+  { id: "M.Gold", type: "Gold", qty: 331000, pct: 0.018182 },
+  { id: "A.Gold", type: "Gold", qty: 420000, pct: 0.004545 },
+  { id: "L.Dust", type: "Dust", qty: 150, pct: 0.306818 },
+  { id: "M.Dust", type: "Dust", qty: 600, pct: 0.054545 },
+  { id: "A.Dust", type: "Dust", qty: 900, pct: 0.013636 },
+  { id: "L.Stone", type: "Stones", qty: 15, pct: 0.102273 },
+  { id: "M.Stone", type: "Stones", qty: 25, pct: 0.018182 },
+  { id: "A.Stone", type: "Stones", qty: 40, pct: 0.004545 },
+  { id: "L.Dia", type: "Diamonds", qty: 60, pct: 0.102273 },
+  { id: "M.Dia", type: "Diamonds", qty: 120, pct: 0.018182 },
+  { id: "A.Dia", type: "Diamonds", qty: 240, pct: 0.004545 },
+//  { id: "L.Juice", type: "Juice", qty: 0, pct: 0 }, // Ignoring 0 qty/pct entries
+  { id: "M.Juice", type: "Juice", qty: 20, pct: 0.018182 },
+  { id: "A.Juice", type: "Juice", qty: 30, pct: 0.004545 },
+//  { id: "L.Shard", type: "Shards", qty: 0, pct: 0 }, // Ignoring 0 qty/pct entries
+  { id: "M.Shard", type: "Shards", qty: 20, pct: 0.018182 },
+  { id: "A.Shard", type: "Shards", qty: 30, pct: 0.004545 },
+];
+
+// Optional: Verify total percentage if needed
+// const totalPct = bountyEntries.reduce((sum, entry) => sum + entry.pct, 0);
+// console.log("Total Bounty Percentage:", totalPct); // Should be close to 1.0 or 100%

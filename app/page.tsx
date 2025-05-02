@@ -3,12 +3,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { Container, Typography, Box, Button, Paper, Divider, Stack } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LockIcon from '@mui/icons-material/Lock'; 
-import { Valuation, Slot, BountyEntry, ResourceType, bountyEntries, investBase } from '../lib/bountyData'; 
-import ValuationForm from '../components/ValuationForm';
-import BountyBoard from '../components/BountyBoard';
-import Controls from '../components/Controls'; 
-import { computeOptimalRefresh } from '../lib/strategy';
-import BountyDefinitionDialog from '../components/BountyDefinitionDialog';
+import { Valuation, Slot, BountyEntry, ResourceType, bountyEntries, investBase } from '@/lib/bountyData';
+import ValuationForm from '@/components/ValuationForm';
+import BountyBoard from '@/components/BountyBoard';
+import Controls from '@/components/Controls'; 
+import { computeOptimalRefresh } from '@/lib/strategy';
+import BountyDefinitionDialog from '@/components/BountyDefinitionDialog';
 
 // Define structure for history data point
 interface HistoryPoint {
