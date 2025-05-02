@@ -34,6 +34,7 @@ All notable changes to this project will be documented in this file.
 - Theme: Applied primary color to subsection titles (`page.tsx`).
 - Layout: Adjusted maximum width constraints (`page.tsx`) based on feedback.
 - **Build**: Configured Next.js for static export (`next.config.ts`).
+- **Manual Quest Input**: Updated dialog UI to use selectable icons for resource type and colored squares for rarity, replacing dropdowns (`BountyDefinitionDialog.tsx`).
 
 ### Fixed
 - **Build Error**: Bypassed MUI Grid type errors by replacing Grid with Box/Flexbox in `BountyBoard.tsx`.
@@ -43,6 +44,7 @@ All notable changes to this project will be documented in this file.
 - **Locking**: Ensured auto-lock triggers correctly based on the recommended refresh action in `handleEvaluate`.
 - Control Panel: Addressed layout issues ensuring chart placeholder appears to the right, not underneath, on smaller screens (using Flexbox).
 - **Deployment**: Corrected Firebase Hosting public directory to `out` and removed SPA rewrite (`firebase.json`).
+- **Manual Quest Input**: Ensured selected rarity styling persists after confirming manual quest definition by updating the slot's entry ID correctly (`app/page.tsx`, `BountySlot.tsx`).
 
 ### Removed
 - **Deployment**: Removed Netlify configuration files (`netlify.toml`, `.netlify/`).
