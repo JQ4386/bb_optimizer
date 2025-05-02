@@ -1,28 +1,57 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { Container, Typography, Box, Button, Paper, Divider } from '@mui/material';
+import { useState, useEffect, useCallback } from 'react';
+import { Container, Typography, Box, Button, Paper, Divider, Stack } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LockIcon from '@mui/icons-material/Lock'; 
-import { Valuation, Slot, BountyEntry, ResourceType, bountyEntries } from '../lib/bountyData'; 
+import { Valuation, Slot, BountyEntry, ResourceType, bountyEntries, investBase } from '../lib/bountyData'; 
 import ValuationForm from '../components/ValuationForm';
 import BountyBoard from '../components/BountyBoard';
 import Controls from '../components/Controls'; 
 import { computeOptimalRefresh } from '../lib/strategy';
+import BountyDefinitionDialog from '../components/BountyDefinitionDialog';
+
+// Define structure for history data point
+interface HistoryPoint {
+    step: number;
+    expectedValue: number; // Expected value *after* a potential refresh
+    currentValue: number; // Actual board value *before* refresh decision
+}
 
 // ... (interfaces, initialValuation, helpers) ...
 interface EvaluationResult {
-  bestLockIds: string[];
-  expectedNetGain: number;
+  recommendedAction?: 'Stop' | 'Refresh'; 
+  expectedNetGain: number;   
   diamondCost: number;
 } 
 
 const initialValuation: Valuation = {
   perUnit: { 
-    Gold: 0.00007414, Dust: 0.25706941, Stones: 3, Diamonds: 1, Juice: 7.8, Shards: 7.414285714 
+    Gold: 0,        // Updated
+    Dust: 0.25706941, 
+    Stones: 0,      // Updated
+    Diamonds: 1, 
+    Juice: 6,       // Updated
+    Shards: 5        // Updated
   },
+  // Update perInvest based on new perUnit and imported investBase
   perInvest: { 
-    Gold: 0.7414, Dust: 25.706941, Stones: 3, Diamonds: 10, Juice: 390, Shards: 7.414285714
+    Gold: 0 * (investBase.Gold || 1),               // Updated
+    Dust: 0.25706941 * (investBase.Dust || 1), 
+    Stones: 0 * (investBase.Stones || 1),           // Updated
+    Diamonds: 1 * (investBase.Diamonds || 1), 
+    Juice: 6 * (investBase.Juice || 1),             // Updated
+    Shards: 5 * (investBase.Shards || 1)             // Updated
   } 
+};
+
+// Mapping from full ResourceType to ID abbreviation
+const resourceIdMap: Record<ResourceType, string> = {
+    Gold: 'Gold',
+    Dust: 'Dust',
+    Stones: 'Stone', // Abbreviation used in ID
+    Diamonds: 'Dia', // Abbreviation used in ID
+    Juice: 'Juice',
+    Shards: 'Shard' // Abbreviation used in ID
 };
 
 const getRandomBountyEntry = (): BountyEntry => {
@@ -41,205 +70,327 @@ const sortSlots = (slotsToSort: Slot[]): Slot[] => {
     return [...slotsToSort].sort((a, b) => (a.locked === b.locked ? 0 : a.locked ? -1 : 1));
 };
 
-const generateInitialSlots = (count: number, valuation: Valuation): Slot[] => {
-  console.log("Generating initial slots with count:", count);
-  const slots: Slot[] = [];
-  const usedIds = new Set<string>();
-  for (let i = 0; i < count; i++) {
-    const randomEntry = getRandomBountyEntry();
-    let uniqueId = `${randomEntry.id}-${i}`;
-    while (usedIds.has(uniqueId)) {
-        uniqueId = `${randomEntry.id}-${i}-${Math.random().toString(16).slice(2)}`;
-    }
-    usedIds.add(uniqueId);
-    slots.push({
-      entry: { ...randomEntry, id: uniqueId }, 
-      value: randomEntry.qty * (valuation.perUnit[randomEntry.type] || 0),
-      locked: false,
-    });
-  }
-  return slots;
-};
-
+const calculateBoardValue = (slotsToCalc: Slot[], valuationToUse: Valuation): number => {
+    return slotsToCalc.reduce((sum, slot) => sum + (slot.value || 0), 0); // Use pre-calculated slot.value
+}
 
 export default function Home() {
-  // ... state variables ...
+  // --- State Variables ---
   const [valuation, setValuation] = useState<Valuation>(initialValuation);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [hasSub, setHasSub] = useState(false);
   const [evaluationResult, setEvaluationResult] = useState<EvaluationResult | null>(null);
   const [suggestedLockIds, setSuggestedLockIds] = useState<string[]>([]);
-  const [isAutoLockEnabled, setIsAutoLockEnabled] = useState(false); // State for the toggle
+  const [evaluationHistory, setEvaluationHistory] = useState<HistoryPoint[]>([]);
+  const [isDefinitionDialogOpen, setIsDefinitionDialogOpen] = useState(false);
+  const [definingSlotEntryId, setDefiningSlotEntryId] = useState<string | null>(null);
+  const [isBountifulBountyEnabled, setIsBountifulBountyEnabled] = useState(false);
+  const [initialBoardValueAfterReset, setInitialBoardValueAfterReset] = useState(0);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [needsRecalculationAfterLock, setNeedsRecalculationAfterLock] = useState(false);
 
-  // ... useEffect hooks ...
-   useEffect(() => {
-    setSlots(currentSlots => 
-      currentSlots.map(slot => ({
-        ...slot,
-        value: slot.entry.qty * (valuation.perUnit[slot.entry.type] || 0)
-      }))
-    );
-    setEvaluationResult(null);
-    setSuggestedLockIds([]);
-  }, [valuation]);
+  // --- Memos/Callbacks --- 
+  const generateInitialSlots = useCallback((count: number, currentValuation: Valuation, bountifulEnabled: boolean): Slot[] => {
+    console.log(`Generating initial slots: count=${count}, bountiful=${bountifulEnabled}`);
+    const slotsArr: Slot[] = [];
+    const quantityMultiplier = bountifulEnabled ? 2 : 1;
+    for (let i = 0; i < count; i++) {
+      const randomEntry = getRandomBountyEntry(); 
+      let uniqueEntryId = `${randomEntry.id}-${Date.now()}-${i}-${Math.random()}`;
+      slotsArr.push({
+        entry: { ...randomEntry, id: uniqueEntryId }, 
+        value: randomEntry.qty * quantityMultiplier * (currentValuation.perUnit[randomEntry.type] || 0),
+        locked: false,
+      });
+    }
+    return slotsArr;
+  }, []);
+
+  const recalculateSlotValues = useCallback((currentSlots: Slot[]): Slot[] => {
+    const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
+    console.log("Recalculating values with multiplier:", quantityMultiplier);
+    // Important: Check if currentSlots actually exists before mapping
+    if (!currentSlots) return []; 
+    return currentSlots.map(slot => ({
+      ...slot,
+      // Ensure slot.entry exists before accessing its properties
+      value: slot.entry ? (slot.entry.qty * quantityMultiplier * (valuation.perUnit[slot.entry.type] || 0)) : 0
+    }));
+  }, [valuation, isBountifulBountyEnabled]);
   
+  // **Define applyAutoLock BEFORE useEffect that depends on it**
+  const applyAutoLock = useCallback((idsToLock: string[]) => {
+    if (idsToLock.length === 0) return;
+    console.log("(Auto) Locking suggested slots:", idsToLock);
+    setSlots(currentSlots => 
+      currentSlots.map(slot => 
+        idsToLock.includes(slot.entry.id) ? { ...slot, locked: true } : slot
+      )
+    );
+  }, []);
+
+  // --- useEffect Hooks ---
+  // Recalculate values when valuation or bountiful toggle changes
   useEffect(() => {
-    console.log(`Subscription status changed or initial load: hasSub=${hasSub}`);
-    const numberOfSlots = hasSub ? 9 : 8;
-    setSlots(generateInitialSlots(numberOfSlots, valuation));
+    // Pass the current slots state updater function to recalculateSlotValues
+    setSlots(recalculateSlotValues); 
     setEvaluationResult(null);
     setSuggestedLockIds([]);
-  }, [hasSub]);
+    setEvaluationHistory([]); 
+    setNeedsRecalculationAfterLock(false);
+  }, [valuation, isBountifulBountyEnabled, recalculateSlotValues]);
+  
+  // Initialize/reset slots when subscription status changes OR on initial load
+  useEffect(() => {
+    const numberOfSlots = hasSub ? 9 : 8;
+    const newSlots = generateInitialSlots(numberOfSlots, valuation, isBountifulBountyEnabled);
+    setSlots(newSlots);
+    setInitialBoardValueAfterReset(newSlots.reduce((sum, slot) => sum + slot.value, 0)); 
+    setEvaluationResult(null);
+    setSuggestedLockIds([]);
+    setEvaluationHistory([]); 
+    setRefreshCount(0);
+    setNeedsRecalculationAfterLock(false);
+  }, [hasSub, valuation, isBountifulBountyEnabled, generateInitialSlots]); 
 
-  // ... handleValuationChange, handleToggleLock ...
-   const handleValuationChange = (newValuation: Valuation) => {
+  // **NEW useEffect for Recalculation After Lock**
+  useEffect(() => {
+    if (!needsRecalculationAfterLock) return;
+
+    console.log("Triggering recalculation after lock update...");
+    const boardValueBeforeRecalc = slots.reduce((sum, slot) => sum + slot.value, 0);
+    
+    // Perform the second calculation using the *updated* slots state
+    const result = computeOptimalRefresh(slots, valuation, isBountifulBountyEnabled);
+    console.log("Recalculation Result (For Display & History):", result);
+
+    // Update UI display state with the second result
+    setEvaluationResult({
+        recommendedAction: result.recommendedAction,
+        expectedNetGain: result.immediateNetGain, 
+        diamondCost: result.diamondCost
+    });
+
+    // Update history with the second result
+    const expectedValueAfterImmediateAction = boardValueBeforeRecalc + result.immediateNetGain;
+    setEvaluationHistory(prevHistory => [
+        ...prevHistory,
+        { step: prevHistory.length + 1, expectedValue: expectedValueAfterImmediateAction, currentValue: boardValueBeforeRecalc }
+    ]);
+    
+    // Update suggested locks based on the second calculation (might be same or slightly different)
+    setSuggestedLockIds(result.lockIdsForAction);
+    
+    // Reset the flag
+    setNeedsRecalculationAfterLock(false);
+
+  // Ensure applyAutoLock is NOT listed as a dependency here, 
+  // as that would cause infinite loops. The dependency on `slots` is sufficient.
+  }, [slots, needsRecalculationAfterLock, valuation, isBountifulBountyEnabled]); 
+
+  // --- Handlers ---
+  const handleValuationChange = (newValuation: Valuation) => {
     setValuation(newValuation);
   };
 
-  const handleToggleLock = (index: number) => {
-    setSlots(currentSlots =>
-      currentSlots.map((slot, i) =>
-        i === index ? { ...slot, locked: !slot.locked } : slot
-      )
-    );
-  };
-  
-  // Renamed from original handleAutoLock to avoid conflict
-  const applyAutoLock = () => {
-     if (suggestedLockIds.length === 0) return;
-     console.log("(Auto) Locking suggested slots:", suggestedLockIds);
-     setSlots(currentSlots => {
-        const updatedSlots = currentSlots.map(slot => 
-            suggestedLockIds.includes(slot.entry.id) 
-            ? { ...slot, locked: true } 
-            : slot
-        );
-        // Don't sort here
-        return updatedSlots; 
-    });
-  };
-
-  // Modified handleEvaluate to potentially trigger auto-lock
+  // Evaluate: Trigger 1 (Calculate and Apply Locks if needed)
   const handleEvaluate = () => {
-    console.log("Evaluate Optimal Refresh Clicked");
-    const currentSlotsWithValue = slots.map(slot => ({ 
-        ...slot, 
-        value: slot.entry.qty * (valuation.perUnit[slot.entry.type] || 0) 
-    }));
-    const result = computeOptimalRefresh(currentSlotsWithValue, valuation);
-    console.log("Evaluation Result:", result);
-    setEvaluationResult(result);
-    setSuggestedLockIds(result.bestLockIds);
+    console.log("Evaluate Optimal Refresh Clicked (Trigger 1)");
     
-    // Trigger auto-lock immediately after evaluation if enabled
-    if (isAutoLockEnabled && result.bestLockIds.length > 0) {
-        // Use a brief timeout to allow state updates to render before locking
-        setTimeout(() => applyAutoLock(), 50); 
+    // Calculate the initial recommendation
+    const result = computeOptimalRefresh(slots, valuation, isBountifulBountyEnabled);
+    console.log("Initial Evaluation Result (Strategy Output):", result);
+
+    // **DO NOT** update evaluationResult or history here
+    // **DO NOT** update suggestedLockIds here (will be updated in useEffect if needed)
+    
+    // Apply locks ONLY if the recommended action is 'Refresh'
+    if (result.recommendedAction === 'Refresh') {
+         console.log("Action is Refresh, applying locks:", result.lockIdsForAction);
+         // Use the callback version of applyAutoLock directly
+         applyAutoLock(result.lockIdsForAction); 
+         // Set the flag to trigger recalculation via useEffect
+         setNeedsRecalculationAfterLock(true); 
+    } else {
+        // If stopping is optimal, update the display immediately with 0 gain
+        setEvaluationResult({
+            recommendedAction: 'Stop',
+            expectedNetGain: 0,
+            diamondCost: result.diamondCost // Still show cost info
+        });
+        setSuggestedLockIds(result.lockIdsForAction); // Show initially locked slots
+        setNeedsRecalculationAfterLock(false); // Ensure flag is false
     }
   }; 
   
-  // New handler for the Auto Lock Toggle Switch
-  const handleAutoLockToggle = (isEnabled: boolean) => {
-      setIsAutoLockEnabled(isEnabled);
-      console.log("Auto-Lock Toggle changed:", isEnabled);
-  };
-
-  // handleRefresh, handleReset, handleSubscriptionToggle remain the same
+  // Refresh replaces non-locked slots with random entries
    const handleRefresh = () => {
     console.log("Refresh Board Clicked");
     setSlots(currentSlots => {
-      const slotsToKeepIndices = new Set(currentSlots.map((s, i) => s.locked ? i : -1).filter(i => i !== -1));
-      const numberOfSlotsToRoll = currentSlots.length - slotsToKeepIndices.size;
-      if (numberOfSlotsToRoll === 0) {
-          console.log("All slots locked, performing full reset instead of refresh.");
-          return generateInitialSlots(currentSlots.length, valuation); 
-      }
-      const newEntries = Array.from({length: numberOfSlotsToRoll}, () => getRandomBountyEntry());
-      let newEntryIndex = 0;
-      const refreshedSlots = currentSlots.map((slot, index) => {
-          if (slotsToKeepIndices.has(index)) {
-              return slot; 
+      const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
+      const refreshedSlots = currentSlots.map(slot => {
+          if (slot.locked) {
+              return slot; // Keep locked slots
           } else {
-              const newEntry = newEntries[newEntryIndex++];
+              // Replace non-locked slot with a new random entry
+              const randomEntry = getRandomBountyEntry();
+              let uniqueEntryId = `${randomEntry.id}-refreshed-${Date.now()}-${Math.random()}`;
               return {
-                  entry: { ...newEntry, id: `${newEntry.id}-refreshed-${index}-${Math.random()}` }, 
-                  value: newEntry.qty * (valuation.perUnit[newEntry.type] || 0),
+                  entry: { ...randomEntry, id: uniqueEntryId }, 
+                  value: randomEntry.qty * quantityMultiplier * (valuation.perUnit[randomEntry.type] || 0),
                   locked: false
               };
           }
       });
+      // Sort slots to bring locked ones to the front visually (optional)
       return sortSlots(refreshedSlots); 
     });
     setEvaluationResult(null); 
     setSuggestedLockIds([]);
+    // **Increment Refresh Count**
+    setRefreshCount(prev => prev + 1);
   };
 
+  // Reset creates all new random slots
   const handleReset = () => {
     console.log("Reset Board Clicked");
     const numberOfSlots = hasSub ? 9 : 8;
-    const initialSlots = generateInitialSlots(numberOfSlots, valuation);
+    const initialSlots = generateInitialSlots(numberOfSlots, valuation, isBountifulBountyEnabled);
     setSlots(initialSlots);
+    setInitialBoardValueAfterReset(initialSlots.reduce((sum, slot) => sum + slot.value, 0));
     setEvaluationResult(null); 
     setSuggestedLockIds([]);
+    setEvaluationHistory([]); 
+    // **Reset Refresh Count**
+    setRefreshCount(0);
+    setNeedsRecalculationAfterLock(false);
   };
 
   const handleSubscriptionToggle = () => {
     setHasSub(current => !current);
   };
 
+  // Handler for the new toggle
+  const handleBountifulBountyToggle = () => {
+      setIsBountifulBountyEnabled(current => {
+          const newState = !current;
+          console.log("Bountiful Bounty Toggled:", newState);
+          // TODO: Need to re-calculate slot values and board state when toggled
+          // This might involve regenerating slots or recalculating values
+          // For now, just toggle the state.
+          return newState;
+      });
+      // Trigger recalculation after state update?
+      // Maybe call handleReset() or a dedicated recalculate function?
+  };
+
+  // --- Dialog Handlers (Adjusted for Redefine) ---
+  const handleOpenRedefineDialog = (entryId: string) => {
+      setDefiningSlotEntryId(entryId); // Store entry.id
+      setIsDefinitionDialogOpen(true);
+  };
+
+  const handleCloseDefinitionDialog = () => {
+      setIsDefinitionDialogOpen(false);
+      setDefiningSlotEntryId(null);
+  };
+
+  // Confirm needs to find the specific entry based on selection, not manual quantity
+  const handleConfirmDefinition = (resourceType: ResourceType, rarity: string /* removed quantity */) => {
+      if (!definingSlotEntryId) return; 
+
+      // Use the map to get the correct abbreviation for the ID
+      const resourceAbbreviation = resourceIdMap[resourceType];
+      if (!resourceAbbreviation) {
+          console.error(`Unknown resource type abbreviation for: ${resourceType}`);
+          handleCloseDefinitionDialog();
+          return;
+      }
+
+      const baseEntryId = `${rarity}.${resourceAbbreviation}`; // Construct ID with abbreviation
+      const templateEntry = bountyEntries.find(entry => entry.id === baseEntryId);
+
+      if (!templateEntry) {
+          console.error(`Unknown resource template for: ${baseEntryId}`);
+          handleCloseDefinitionDialog();
+          return;
+      }
+
+      const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
+      const newEntryData: BountyEntry = {
+          ...templateEntry, 
+          id: definingSlotEntryId, 
+      };
+      const newValue = newEntryData.qty * quantityMultiplier * (valuation.perUnit[newEntryData.type] || 0);
+
+      setSlots(currentSlots => 
+          currentSlots.map(slot => 
+              slot.entry.id === definingSlotEntryId 
+              ? { ...slot, entry: newEntryData, value: newValue, locked: false } 
+              : slot
+          )
+      );
+      handleCloseDefinitionDialog();
+  };
+
+  const totalCurrentValue = slots.reduce((sum, slot) => sum + slot.value, 0);
+  const totalExtraValue = totalCurrentValue - initialBoardValueAfterReset - (refreshCount * (50 * (valuation.perUnit['Diamonds'] || 0)));
+
   return (
-    <Box sx={{ 
-        pt: 2, pb: 4, px: { xs: 1, sm: 2 }, 
-        minHeight: '100vh',
-        maxWidth: 1200, 
-        mx: 'auto' 
-      }}
-    >
-      <Typography 
+     <Box sx={{ pt: 2, pb: 4, px: { xs: 1, sm: 2 }, minHeight: '100vh', maxWidth: 1200, mx: 'auto' }}>
+       <Typography 
         variant="h4" component="h1" align="center" 
         gutterBottom sx={{ mb: 3, color: 'primary.main' }}
-      >
-        BOUNTY BOARD OPTIMIZER
-      </Typography>
+       >
+         JD's Bounty Board Optimizer
+       </Typography>
 
-      {/* Section Title: Resource Value Config - Apply color */}
-      <Typography variant="h6" component="h2" sx={{ mb: 1, color: 'primary.main' }}>
-          Resource Value Config
-      </Typography>
-      <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
+       <Box component="section" sx={{ mb: 4 }}>
+         <Typography variant="h5" component="h2" gutterBottom sx={{ color: 'primary.main' }}>
+           Resource Value Config
+         </Typography>
          <ValuationForm 
-          valuation={valuation} 
-          onValuationChange={handleValuationChange} 
+            valuation={valuation}
+            onValuationChange={handleValuationChange}
          />
-      </Paper>
-         
-      {/* Section Title: Control Panel - Apply color */}
-      <Typography variant="h6" component="h2" sx={{ mb: 1, color: 'primary.main' }}>
-          Control Panel
-      </Typography>
-      <Controls 
-          onEvaluate={handleEvaluate} 
-          onReset={handleReset} 
-          onRefresh={handleRefresh} 
-          onSubscriptionToggle={handleSubscriptionToggle}
-          hasSub={hasSub}
-          isAutoLockEnabled={isAutoLockEnabled} 
-          onAutoLockToggle={handleAutoLockToggle} 
-          evaluationResult={evaluationResult}
-      />
-            
-      {/* Section Title: Quests - Apply color */}
-      <Typography variant="h6" component="h2" sx={{ mt: 3, mb: 1, color: 'primary.main' }}>
-          Quests
-      </Typography>
-      <Paper elevation={1} sx={{ p: { xs: 1, sm: 2 } }}>
-         <BountyBoard 
-          slots={slots} 
-          onToggleLock={handleToggleLock} 
-          suggestedLockIds={suggestedLockIds}
-         />
-      </Paper>
+       </Box>
 
-    </Box>
+       <Box component="section" sx={{ mb: 4 }}> 
+         <Typography variant="h5" component="h2" gutterBottom sx={{ color: 'primary.main' }}>
+           Control Panel
+         </Typography>
+         <Controls
+           onEvaluate={handleEvaluate}
+           onReset={handleReset}
+           onRefresh={handleRefresh}
+           onSubscriptionToggle={handleSubscriptionToggle}
+           hasSub={hasSub}
+           evaluationResult={evaluationResult}
+           evaluationHistory={evaluationHistory}
+           isBountifulBountyEnabled={isBountifulBountyEnabled}
+           onBountifulBountyToggle={handleBountifulBountyToggle}
+           totalExtraValue={totalExtraValue}
+         />
+       </Box>
+
+       <Stack direction="row" alignItems="center" sx={{ mt: 3, mb: 1 }}> 
+             <Typography variant="h6" component="h2" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+                 {`Quests - Total Value: ${totalCurrentValue.toFixed(2)}`}
+             </Typography>
+        </Stack>
+       <Paper elevation={1} sx={{ p: { xs: 1, sm: 2 } }}>
+          <BountyBoard 
+           slots={slots} 
+           onSlotClick={handleOpenRedefineDialog} 
+           suggestedLockIds={suggestedLockIds}
+          />
+       </Paper>
+
+       <BountyDefinitionDialog 
+         open={isDefinitionDialogOpen}
+         onClose={handleCloseDefinitionDialog}
+         onConfirm={handleConfirmDefinition}
+       />
+     </Box>
   );
 }

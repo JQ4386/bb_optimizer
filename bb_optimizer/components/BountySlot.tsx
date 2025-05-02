@@ -3,48 +3,65 @@
 import React from 'react';
 import { Card, Typography, CardActionArea, Box } from '@mui/material'; 
 import LockIcon from '@mui/icons-material/Lock';
-import { Slot } from '../lib/bountyData';
+// Import ONLY types from bountyData
+import { Slot, BountyEntry, ResourceType } from '../lib/bountyData';
 import { alpha } from '@mui/material/styles';
 
 interface BountySlotProps {
   slot: Slot;
-  index: number; 
-  onToggleLock: (index: number) => void;
+  onSlotClick: (entryId: string) => void; 
   highlight?: boolean; 
 }
 
-// Increase alpha values for background tints
+// Map rarity ID to full name
+const rarityNames: Record<string, string> = {
+    L: 'Legendary',
+    M: 'Mythic',
+    A: 'Ascended', // Corrected name
+    default: '' // Handle default case if needed
+};
+
+// Rarity colors (use same keys as rarityNames)
 const rarityTintColors: Record<string, { bg: string, border: string }> = {
-  'L': { bg: alpha('#ff9800', 0.25), border: '#ff9800' }, // Increased from 0.15
-  'M': { bg: alpha('#f44336', 0.25), border: '#f44336' }, // Increased from 0.15
-  'A': { bg: alpha('#ce93d8', 0.30), border: '#ce93d8' }, // Increased from 0.20
-  'default': { bg: alpha('#e4d7c6', 0.70), border: '#a1887f' } // Increased from 0.60
+  'L': { bg: alpha('#ff9800', 0.25), border: '#ff9800' }, 
+  'M': { bg: alpha('#f44336', 0.25), border: '#f44336' }, 
+  'A': { bg: alpha('#ce93d8', 0.30), border: '#ce93d8' }, 
+  'default': { bg: alpha('#e4d7c6', 0.70), border: '#a1887f' } 
 };
 
-// Resource Icons
-const resourceIcons: Record<string, string> = {
-  Gold: '💰', Dust: '✨', Stones: '🧱', Diamonds: '💎', Juice: '💧', Shards: '🧩',
+// Define resourceIconPaths LOCALLY again
+const resourceIconPaths: Record<ResourceType, string> = {
+  Gold: '/icons/gold.png',
+  Dust: '/icons/dust.png',
+  Stones: '/icons/rareSoulstone.png',
+  Diamonds: '/icons/diamond.png',
+  Juice: '/icons/juice.png',
+  Shards: '/icons/shard.png',
 };
 
-const BountySlot: React.FC<BountySlotProps> = ({ slot, index, onToggleLock, highlight }) => {
+const BountySlot: React.FC<BountySlotProps> = ({ slot, onSlotClick, highlight }) => {
   const handleClick = () => {
-    onToggleLock(index);
+    onSlotClick(slot.entry.id);
   };
 
-  const rarityPrefix = slot.entry.id.split('.')[0]; 
+  // Extract rarity prefix from the potentially redefined entry ID
+  const rarityPrefix = slot.entry.id.split('.')[0] || 'default'; 
   const colors = rarityTintColors[rarityPrefix] || rarityTintColors['default'];
+  const rarityFullName = rarityNames[rarityPrefix] || ''; // Get full name
+  // Use local definition of resourceIconPaths
+  const iconPath = resourceIconPaths[slot.entry.type] || '/icons/default.png'; // Fallback icon
 
   return (
     <Card 
       elevation={slot.locked ? 1 : 3} 
       sx={{
         position: 'relative',
-        backgroundColor: colors.bg, 
+        backgroundColor: colors.bg, // Background updates based on prefix
         border: highlight 
           ? '2px solid yellow' 
-          : `1px solid ${colors.border}`, 
+          : `1px solid ${colors.border}`, // Border updates based on prefix
         borderRadius: '8px',
-        opacity: slot.locked ? 0.7 : 1, 
+        opacity: slot.locked ? 0.7 : 1, // Opacity based on lock status only
         color: 'text.primary', 
         display: 'flex', 
         height: '100%', // Allow grid to control height if needed
@@ -62,27 +79,42 @@ const BountySlot: React.FC<BountySlotProps> = ({ slot, index, onToggleLock, high
             textAlign: 'center', // Center text
         }}
       >
-        {/* Top: Type */}
-        <Typography variant="body1" sx={{ fontWeight: 'bold', color: colors.border, mb: 0.5 }}>
-            {`${rarityPrefix !== 'default' ? rarityPrefix+'.' : ''}${slot.entry.type}`}
-        </Typography>
+        {/* Always render defined slot content */}
+        <>
+          {/* Top: Display ONLY Rarity Name */}
+          <Typography variant="body1" sx={{ fontWeight: 'bold', color: colors.border, mb: 0.5, height: '1.5em' /* Ensure space even if empty */ }}>
+              {rarityFullName}
+          </Typography>
 
-        {/* Middle: Icon + Quantity (inline) */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, my: 0.5 }}>
-            <Typography variant="h5">{resourceIcons[slot.entry.type] || '❓'}</Typography>
-            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                {slot.entry.qty.toLocaleString()}
-            </Typography>
-        </Box>
+          {/* Middle: Icon + Quantity */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, my: 0.5 }}>
+              <Box component="img" 
+                src={iconPath}
+                alt={slot.entry.type}
+                sx={{
+                  width: 24,
+                  height: 24,
+                  verticalAlign: 'middle'
+                }}
+              />
+              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                  {slot.entry.qty.toLocaleString()}
+              </Typography>
+          </Box>
 
-        {/* Bottom: Value */}
-        <Typography variant="caption" sx={{ opacity: 0.8, mt: 0.5 }}>
-            Value: {slot.value.toFixed(2)}
-        </Typography>
-
+          {/* Bottom: Resource Type (Moved Here) */}
+          <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
+               {slot.entry.type}
+          </Typography>
+          
+          {/* Value */}
+          <Typography variant="caption" sx={{ opacity: 0.8, mt: 0.5 }}>
+              Value: {slot.value.toFixed(2)}
+          </Typography>
+        </>
       </CardActionArea>
       
-      {/* Lock Icon remains top-right */}
+      {/* Lock icon based on lock status */}
       {slot.locked && (
           <LockIcon 
             sx={{ 

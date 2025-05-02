@@ -1,24 +1,40 @@
 'use client';
 
-import React from 'react';
-import { Box, Button, Switch, FormControlLabel, Typography, Paper } from '@mui/material';
+import React, { useRef } from 'react';
+import { Box, Button, Switch, FormControlLabel, Typography, Paper, IconButton } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LockIcon from '@mui/icons-material/Lock'; // Keep for potential future use, but toggle replaces button
+import CalculateIcon from '@mui/icons-material/Calculate';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DownloadIcon from '@mui/icons-material/Download';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { LineChart } from '@mui/x-charts/LineChart';
+
+// Add HistoryPoint interface (can also be imported if defined centrally)
+interface HistoryPoint {
+    step: number;
+    expectedValue: number; 
+    currentValue: number; 
+}
 
 interface ControlsProps {
   onEvaluate: () => void;
   onReset: () => void;
   onRefresh: () => void; // Added prop for Refresh button
   onSubscriptionToggle: () => void;
-  isAutoLockEnabled: boolean; // Added prop for Auto Lock toggle state
-  onAutoLockToggle: (isEnabled: boolean) => void; // Added prop for handling toggle change
   hasSub: boolean;
   evaluationResult?: { 
+    recommendedAction?: 'Stop' | 'Refresh';
     expectedNetGain: number;
     diamondCost: number;
   } | null;
+  evaluationHistory: HistoryPoint[]; // Add history prop
   // Disable evaluate/refresh/autolock if needed (e.g., during computation)
   // disabled?: boolean; 
+  // Add new props
+  isBountifulBountyEnabled: boolean;
+  onBountifulBountyToggle: () => void;
+  totalExtraValue: number;
 }
 
 const Controls: React.FC<ControlsProps> = ({ 
@@ -26,18 +42,76 @@ const Controls: React.FC<ControlsProps> = ({
   onReset, 
   onRefresh, // Destructure new prop
   onSubscriptionToggle,
-  isAutoLockEnabled, // Destructure new props
-  onAutoLockToggle, 
   hasSub,
   evaluationResult,
+  evaluationHistory, // Destructure history prop
+  // Destructure new props
+  isBountifulBountyEnabled,
+  onBountifulBountyToggle,
+  totalExtraValue,
   // disabled = false,
 }) => {
-  const handleAutoLockChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    onAutoLockToggle(event.target.checked);
-  };
-
   // Define gap value for consistent spacing calculation
   const gapValue = 24; // Corresponds to theme.spacing(3)
+
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  // Map history data to plain objects for the chart dataset
+  const chartDataset = evaluationHistory.map(point => ({
+    step: point.step,
+    expectedValue: point.expectedValue,
+    currentValue: point.currentValue
+  }));
+
+  const handleExport = () => {
+    if (!chartRef.current) {
+        console.error("Chart container ref not found");
+        return;
+    }
+
+    const svgElement = chartRef.current.querySelector('svg');
+    if (!svgElement) {
+        console.error("SVG element not found within chart container");
+        return;
+    }
+
+    // Clone the SVG to avoid modifying the original
+    const svgClone = svgElement.cloneNode(true) as SVGSVGElement;
+    
+    // Get dimensions for placing text
+    const viewBox = svgClone.viewBox.baseVal;
+    const width = viewBox.width || parseFloat(svgClone.getAttribute('width') || '600');
+    const height = viewBox.height || parseFloat(svgClone.getAttribute('height') || '250');
+    const padding = 10;
+
+    // Create a new text element for the extra value
+    const textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    textElement.setAttribute("x", (width / 2).toString()); // Center horizontally
+    textElement.setAttribute("y", (height - padding).toString()); // Position near bottom
+    textElement.setAttribute("dominant-baseline", "auto");
+    textElement.setAttribute("text-anchor", "middle");
+    textElement.setAttribute("fill", "#555"); // Text color
+    textElement.setAttribute("font-size", "10");
+    textElement.textContent = `Total Extra Value (Since Reset): ${totalExtraValue.toFixed(2)}`;
+    
+    // Append the text to the cloned SVG
+    svgClone.appendChild(textElement);
+
+    // Adjust viewbox height slightly if needed to ensure text fits
+    svgClone.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${width} ${height + padding}`);
+
+    // Serialize the modified SVG
+    const svgString = new XMLSerializer().serializeToString(svgClone);
+    const blob = new Blob([svgString], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bounty-chart-export.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     // Single Paper containing everything
@@ -54,7 +128,13 @@ const Controls: React.FC<ControlsProps> = ({
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2 }}>
               {/* Left side buttons */}
               <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button variant="contained" color="secondary" onClick={onEvaluate} sx={{ whiteSpace: 'nowrap' }} /* disabled={disabled} */>
+                <Button 
+                  variant="contained" 
+                  color="secondary" 
+                  onClick={onEvaluate} 
+                  sx={{ whiteSpace: 'nowrap' }}
+                  startIcon={<AutoAwesomeIcon />}
+                >
                   Compute Optimal
                 </Button>
                 <Button 
@@ -64,26 +144,33 @@ const Controls: React.FC<ControlsProps> = ({
                   startIcon={<RefreshIcon />} 
                   title="Refresh Unlocked Slots (Cost: 50 Diamonds)"
                   sx={{ whiteSpace: 'nowrap' }}
-                  /* disabled={disabled} */
                 >
                   Refresh
                 </Button>
               </Box>
               
-              {/* Right side toggles/reset */}
+              {/* Right side toggles/reset + Export */}
               <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'center', gap: 2 }}>
-                 <FormControlLabel
-                  control={<Switch checked={isAutoLockEnabled} onChange={handleAutoLockChange} /* disabled={disabled} */ />}
-                  label="Auto-Lock Suggested"
-                  title="Automatically lock suggested quests after computing"
-                  sx={{ whiteSpace: 'nowrap' }} // Also prevent label wrap if needed
-                />
                 <FormControlLabel
                   control={<Switch checked={hasSub} onChange={onSubscriptionToggle} />}
                   label={hasSub ? "Sub (9 Slots)" : "No Sub (8 Slots)"}
-                  sx={{ mr: { sm: 1 }, whiteSpace: 'nowrap' }} 
+                  title="Toggle between 8 and 9 quest slots"
+                  sx={{ mr: { sm: 1 }, whiteSpace: 'nowrap' }}
                 />
-                <Button variant="outlined" color="secondary" onClick={onReset} size="small" sx={{ whiteSpace: 'nowrap' }}>
+                <FormControlLabel
+                  control={<Switch checked={isBountifulBountyEnabled} onChange={onBountifulBountyToggle} />}
+                  label="Bountiful (+100%)"
+                  title="Apply Bountiful Bounty bonus (Doubles Quantities)"
+                  sx={{ whiteSpace: 'nowrap' }} 
+                />
+                <Button 
+                  variant="outlined" 
+                  color="secondary" 
+                  onClick={onReset} 
+                  size="small" 
+                  sx={{ whiteSpace: 'nowrap' }}
+                  startIcon={<RestartAltIcon />}
+                >
                   Reset Board
                 </Button>
               </Box>
@@ -95,13 +182,19 @@ const Controls: React.FC<ControlsProps> = ({
             {evaluationResult ? (
               <>
                 <Typography variant="body2">
-                  Expected Net Gain from Refresh: {evaluationResult.expectedNetGain.toFixed(2)}
+                  Expected Net Gain from Refresh Action: {evaluationResult.expectedNetGain.toFixed(2)}
                 </Typography>
                 <Typography variant="body2">
                   Diamond Cost (Value): {evaluationResult.diamondCost.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" color={evaluationResult.expectedNetGain > 0 ? 'success.main' : 'error.main'} sx={{ fontWeight: 'bold' }}>
-                  Recommendation: {evaluationResult.expectedNetGain > 0 ? 'Refresh Recommended' : 'Do Not Refresh'}
+                <Typography 
+                  variant="body2" 
+                  color={(evaluationResult.recommendedAction === 'Refresh' && evaluationResult.expectedNetGain > 0) ? 'success.main' : 'error.main'} 
+                  sx={{ fontWeight: 'bold' }}
+                >
+                  Recommendation: {(evaluationResult.recommendedAction === 'Refresh' && evaluationResult.expectedNetGain > 0) 
+                                    ? 'Refresh Recommended' 
+                                    : 'Do Not Refresh (Stop)'}
                 </Typography>
               </>
             ) : (
@@ -110,33 +203,87 @@ const Controls: React.FC<ControlsProps> = ({
               </Typography>
             )}
           </Box>
+           {/* Display Total Extra Value */}
+            <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mt: 1, color: 'text.secondary' }}>
+                Total Extra Value (Since Reset): {totalExtraValue.toFixed(2)}
+            </Typography>
         </Box>
 
         {/* Right Column: Chart Placeholder Area (Flex Item) - Narrower */} 
         {/* Adjust flexBasis for 4/12 split, subtracting half the gap */}
-        <Box sx={{ flexBasis: { xs: '100%', md: `calc(100% * 4 / 12 - ${gapValue / 2}px)`}, display: 'flex', flexDirection: 'column', flexGrow: 1 }}> 
-          <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+        <Box sx={{ 
+            position: 'relative', // Needed for absolute positioning of children
+            flexBasis: { xs: '100%', md: `calc(100% * 4 / 12 - ${gapValue / 2}px)`},
+            display: 'flex', 
+            flexDirection: 'column', 
+            flexGrow: 1, 
+            minHeight: 250 
+        }}> 
+          {/* Export Button Overlay */} 
+           <IconButton 
+              aria-label="Export Chart"
+              onClick={handleExport}
+              disabled={chartDataset.length === 0}
+              size="small"
+              sx={{
+                  position: 'absolute',
+                  top: 8, // Adjust as needed
+                  right: 8, // Adjust as needed
+                  zIndex: 1 // Ensure it's above chart elements if necessary
+              }}
+              title="Export Chart as SVG"
+            >
+              <DownloadIcon fontSize="small" />
+            </IconButton>
+
+          <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', flexShrink: 0, pr: 5 /* Add padding to avoid overlap */ }}>
             Refresh Value Trend
           </Typography>
-          {/* Placeholder SVG Area */}
-          <Box 
-            component="svg" 
-            width="100%" 
-            sx={{ 
-              border: '1px dashed', 
-              borderColor: 'divider', 
-              borderRadius: 1, 
-              bgcolor: 'action.hover',
-              flexGrow: 1, // Allow it to take available vertical space
-              minHeight: 150, // Ensure a minimum height
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center' 
-            }} 
-          >
-             <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill="currentColor" fontSize="14">
-                Chart Placeholder
-            </text>
+          {/* Actual Line Chart */}
+          <Box ref={chartRef} sx={{ flexGrow: 1, width: '100%', height: '100%' }}>
+            {chartDataset.length > 0 ? (
+              <LineChart
+                dataset={chartDataset}
+                xAxis={[{ 
+                    dataKey: 'step', 
+                    label: 'Step', 
+                    scaleType: 'linear',
+                    valueFormatter: (value: number) => value.toString()
+                }]}
+                series={[
+                  {
+                    dataKey: 'expectedValue',
+                    label: 'Expected (Post-Refresh)',
+                    color: '#9c27b0', // Purple
+                    valueFormatter: (value: number | null) => value?.toFixed(0) ?? '' // Format as integer
+                  },
+                  {
+                    dataKey: 'currentValue',
+                    label: 'Actual (Pre-Refresh)',
+                    color: '#2e7d32', // Green
+                    valueFormatter: (value: number | null) => value?.toFixed(0) ?? '' // Format as integer
+                  },
+                ]}
+                margin={{ top: 10, right: 10, bottom: 20, left: 40 }} // Adjusted left margin for values
+                // Optionally add grid, tooltip, legend customization here
+              />
+            ) : (
+               <Box 
+                    sx={{ 
+                    border: '1px dashed', 
+                    borderColor: 'divider', 
+                    borderRadius: 1, 
+                    bgcolor: 'action.hover',
+                    flexGrow: 1, 
+                    minHeight: 150, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center' 
+                    }} 
+                >
+                    <Typography variant="caption" color="text.secondary">No evaluation data yet.</Typography>
+                </Box>
+            )}
           </Box>
         </Box>
 

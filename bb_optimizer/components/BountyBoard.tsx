@@ -8,20 +8,19 @@ import BountySlot from './BountySlot';
 
 interface BountyBoardProps {
   slots: Slot[];
-  onToggleLock: (index: number) => void;
+  onSlotClick: (entryId: string) => void;
   suggestedLockIds?: string[];
 }
 
-const BountyBoard: React.FC<BountyBoardProps> = ({ slots, onToggleLock, suggestedLockIds = [] }) => {
+const BountyBoard: React.FC<BountyBoardProps> = ({ slots, onSlotClick, suggestedLockIds = [] }) => {
   return (
     <Box sx={{ flexGrow: 1, my: 2 }}>
-      <Grid container spacing={2} columns={{ xs: 12 }}>
-        {slots.map((slot, index) => (
+      <Grid container spacing={2}>
+        {slots.map((slot) => (
           <Grid item xs={6} sm={4} md={3} key={slot.entry.id}>
             <BountySlot 
               slot={slot} 
-              index={index} 
-              onToggleLock={onToggleLock} 
+              onSlotClick={onSlotClick} 
               highlight={suggestedLockIds.includes(slot.entry.id)}
             />
           </Grid>
