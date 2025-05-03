@@ -97,9 +97,13 @@ export default function Home() {
     for (let i = 0; i < count; i++) {
       const randomEntry = getRandomBountyEntry(); 
       let uniqueEntryId = `${randomEntry.id}-${Date.now()}-${i}-${Math.random()}`;
+      // Calculate final quantity including multiplier
+      const finalQty = randomEntry.qty * quantityMultiplier;
       slotsArr.push({
-        entry: { ...randomEntry, id: uniqueEntryId }, 
-        value: randomEntry.qty * quantityMultiplier * (currentValuation.perUnit[randomEntry.type] || 0),
+        // Store the potentially doubled quantity
+        entry: { ...randomEntry, id: uniqueEntryId, qty: finalQty }, 
+        // Calculate value based on the finalQty and perUnit valuation
+        value: finalQty * (currentValuation.perUnit[randomEntry.type] || 0),
         locked: false,
       });
     }
@@ -107,16 +111,33 @@ export default function Home() {
   }, []);
 
   const recalculateSlotValues = useCallback((currentSlots: Slot[]): Slot[] => {
-    const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
-    console.log("Recalculating values with multiplier:", quantityMultiplier);
+    // Bountiful Bounty state is accessed directly via isBountifulBountyEnabled
+    const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1; 
+    console.log("Recalculating values based on current bountiful state:", isBountifulBountyEnabled);
+    
     // Important: Check if currentSlots actually exists before mapping
     if (!currentSlots) return []; 
-    return currentSlots.map(slot => ({
-      ...slot,
-      // Ensure slot.entry exists before accessing its properties
-      value: slot.entry ? (slot.entry.qty * quantityMultiplier * (valuation.perUnit[slot.entry.type] || 0)) : 0
-    }));
-  }, [valuation, isBountifulBountyEnabled]);
+    
+    return currentSlots.map(slot => {
+        // Find the base entry definition to get the original quantity
+        const baseEntryId = slot.entry.id.split('-')[0]; // Assumes format like "L.Gold-timestamp-random"
+        const baseBountyEntry = bountyEntries.find(entry => entry.id === baseEntryId);
+        const baseQty = baseBountyEntry ? baseBountyEntry.qty : slot.entry.qty; // Fallback to current qty if base not found
+
+        // Calculate the quantity based on the *current* bountiful state
+        const currentFinalQty = baseQty * quantityMultiplier;
+        
+        // Calculate the new value based on the potentially updated quantity
+        const newValue = currentFinalQty * (valuation.perUnit[slot.entry.type] || 0);
+        
+        // Return the updated slot with potentially adjusted qty and value
+        return {
+            ...slot,
+            entry: { ...slot.entry, qty: currentFinalQty }, // Update qty in the slot entry
+            value: newValue
+        };
+    });
+  }, [valuation, isBountifulBountyEnabled]); // Depend on isBountifulBountyEnabled
   
   // **Define applyAutoLock BEFORE useEffect that depends on it**
   const applyAutoLock = useCallback((idsToLock: string[]) => {
@@ -235,9 +256,13 @@ export default function Home() {
               // Replace non-locked slot with a new random entry
               const randomEntry = getRandomBountyEntry();
               let uniqueEntryId = `${randomEntry.id}-refreshed-${Date.now()}-${Math.random()}`;
+              // Calculate final quantity including multiplier
+              const finalQty = randomEntry.qty * quantityMultiplier;
               return {
-                  entry: { ...randomEntry, id: uniqueEntryId }, 
-                  value: randomEntry.qty * quantityMultiplier * (valuation.perUnit[randomEntry.type] || 0),
+                  // Store the potentially doubled quantity
+                  entry: { ...randomEntry, id: uniqueEntryId, qty: finalQty }, 
+                  // Calculate value based on finalQty and perUnit valuation
+                  value: finalQty * (valuation.perUnit[randomEntry.type] || 0),
                   locked: false
               };
           }
@@ -317,28 +342,36 @@ export default function Home() {
         return;
     }
     
-    console.log(`Redefining slot ${definingSlotEntryId} to ${targetBountyEntry.id}`);
+    // Apply bountiful multiplier here as well
+    const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
+    console.log(`Redefining slot ${definingSlotEntryId} to ${targetBountyEntry.id} with multiplier ${quantityMultiplier}`);
 
     setSlots(currentSlots => {
-      const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
+      // No need for multiplier here, it's applied below
       return currentSlots.map(slot => {
           // Find the slot we are redefining
-          if (slot.entry.id === definingSlotEntryId) {
+          // **Important**: Match against the *original* ID stored when opening the dialog
+          if (slot.entry.id === definingSlotEntryId) { 
+            // Calculate final quantity including multiplier
+            const finalQty = targetBountyEntry.qty * quantityMultiplier;
+            
             // Create a *new* entry object based on the found definition
             const newEntry: BountyEntry = {
-                // Use the ID from the master list (e.g., "L.Gold")
+                // Use the ID from the master list (e.g., "L.Gold") - NOTE: This ID might change if we append timestamps later
                 id: targetBountyEntry.id, 
                 type: targetBountyEntry.type, // Use type from master list
-                qty: targetBountyEntry.qty, // Use qty from master list
+                qty: finalQty, // Use potentially doubled qty
                 pct: targetBountyEntry.pct // Use pct from master list (though might not be needed here)
             };
             
-            // Recalculate value based on the new entry's quantity and type
-            const newValue = newEntry.qty * quantityMultiplier * (valuation.perUnit[newEntry.type] || 0);
+            // Recalculate value based on the new finalQty and type
+            const newValue = finalQty * (valuation.perUnit[newEntry.type] || 0);
 
             console.log("Updated Slot:", { ...slot, entry: newEntry, value: newValue });
             // Return the updated slot
-            return { ...slot, entry: newEntry, value: newValue };
+            // **Important**: Keep other properties like 'locked' status if needed, 
+            // but reset lock on manual change? Assuming we reset lock.
+            return { ...slot, entry: newEntry, value: newValue, locked: false }; 
           }
           // Return other slots unchanged
           return slot;

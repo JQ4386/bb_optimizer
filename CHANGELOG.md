@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 - **Manual Quest Input**: Updated dialog UI to use selectable icons for resource type and colored squares for rarity, replacing dropdowns (`BountyDefinitionDialog.tsx`).
 
 ### Fixed
+- **Bountiful Bounty**: Fixed issue where displayed quantity did not double when Bountiful Bounty was enabled; now `slot.entry.qty` stores the multiplied value (`app/page.tsx`).
 - **Build Error**: Bypassed MUI Grid type errors by replacing Grid with Box/Flexbox in `BountyBoard.tsx`.
 - **Icons**: Resolved 404 errors for icons by moving `public/icons` to the correct project subdirectory.
 - **Evaluation Logic**: Corrected DP gain calculation to only apply refresh cost when slots are actually refreshed.
