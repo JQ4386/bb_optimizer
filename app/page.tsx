@@ -151,28 +151,56 @@ export default function Home() {
   }, []);
 
   // --- useEffect Hooks ---
-  // Recalculate values when valuation or bountiful toggle changes
-  useEffect(() => {
-    // Pass the current slots state updater function to recalculateSlotValues
-    setSlots(recalculateSlotValues); 
-    setEvaluationResult(null);
-    setSuggestedLockIds([]);
-    setEvaluationHistory([]); 
-    setNeedsRecalculationAfterLock(false);
-  }, [valuation, isBountifulBountyEnabled, recalculateSlotValues]);
   
-  // Initialize/reset slots when subscription status changes OR on initial load
+  // Effect for Initial Slot Generation (Runs Once on Mount)
   useEffect(() => {
-    const numberOfSlots = hasSub ? 9 : 8;
-    const newSlots = generateInitialSlots(numberOfSlots, valuation, isBountifulBountyEnabled);
-    setSlots(newSlots);
-    setInitialBoardValueAfterReset(newSlots.reduce((sum, slot) => sum + slot.value, 0)); 
-    setEvaluationResult(null);
-    setSuggestedLockIds([]);
-    setEvaluationHistory([]); 
-    setRefreshCount(0);
-    setNeedsRecalculationAfterLock(false);
-  }, [hasSub, valuation, isBountifulBountyEnabled, generateInitialSlots]); 
+    console.log("Generating initial board on mount...");
+    const initialNumberOfSlots = hasSub ? 9 : 8;
+    const initialSlots = generateInitialSlots(initialNumberOfSlots, valuation, isBountifulBountyEnabled);
+    setSlots(initialSlots);
+    setInitialBoardValueAfterReset(initialSlots.reduce((sum, slot) => sum + slot.value, 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, []); // Empty dependency array ensures this runs only once
+  
+  // Recalculate values/quantities when valuation or bountiful toggle changes
+  useEffect(() => {
+    // Only recalculate if slots are already initialized
+    if (slots.length > 0) { 
+        console.log("Recalculating slot values/quantities due to valuation/bountiful toggle...");
+        setSlots(recalculateSlotValues);
+    }
+    // DO NOT reset evaluation state here
+  }, [valuation, isBountifulBountyEnabled, recalculateSlotValues, slots.length]); // Added slots.length dependency
+  
+  // Adjust number of slots when subscription status changes (AFTER initial load)
+  useEffect(() => {
+    // Prevent running on initial mount if slots aren't populated yet
+    if (slots.length === 0) return; 
+
+    const targetNumberOfSlots = hasSub ? 9 : 8;
+    console.log(`Subscription toggled. Current slots: ${slots.length}, Target slots: ${targetNumberOfSlots}`);
+
+    if (targetNumberOfSlots > slots.length) {
+      // Add a new slot
+      console.log("Adding a slot...");
+      const quantityMultiplier = isBountifulBountyEnabled ? 2 : 1;
+      const randomEntry = getRandomBountyEntry();
+      let uniqueEntryId = `${randomEntry.id}-${Date.now()}-sub-add-${Math.random()}`;
+      const finalQty = randomEntry.qty * quantityMultiplier;
+      const newSlot: Slot = {
+        entry: { ...randomEntry, id: uniqueEntryId, qty: finalQty },
+        value: finalQty * (valuation.perUnit[randomEntry.type] || 0),
+        locked: false,
+      };
+      setSlots(currentSlots => [...currentSlots, newSlot]);
+    } else if (targetNumberOfSlots < slots.length) {
+      // Remove the last slot (simplest approach)
+      // Consider more complex logic if preserving specific slots (e.g., locked ones) is critical
+      console.log("Removing the last slot...");
+      setSlots(currentSlots => currentSlots.slice(0, targetNumberOfSlots));
+    }
+    // DO NOT reset evaluation state here
+  }, [hasSub]); // Only depends on hasSub
 
   // **NEW useEffect for Recalculation After Lock**
   useEffect(() => {
@@ -355,22 +383,23 @@ export default function Home() {
             // Calculate final quantity including multiplier
             const finalQty = targetBountyEntry.qty * quantityMultiplier;
             
+            // Generate a new unique ID using the target base ID and current time/random
+            const newUniqueId = `${targetBountyEntry.id}-manual-${Date.now()}-${Math.random()}`;
+
             // Create a *new* entry object based on the found definition
+            // **Crucially, use the new unique ID**
             const newEntry: BountyEntry = {
-                // Use the ID from the master list (e.g., "L.Gold") - NOTE: This ID might change if we append timestamps later
-                id: targetBountyEntry.id, 
-                type: targetBountyEntry.type, // Use type from master list
+                id: newUniqueId, // Use the NEW unique ID
+                type: targetBountyEntry.type, // Update type from master list
                 qty: finalQty, // Use potentially doubled qty
-                pct: targetBountyEntry.pct // Use pct from master list (though might not be needed here)
+                pct: targetBountyEntry.pct // Update pct from master list
             };
             
             // Recalculate value based on the new finalQty and type
             const newValue = finalQty * (valuation.perUnit[newEntry.type] || 0);
 
-            console.log("Updated Slot:", { ...slot, entry: newEntry, value: newValue });
-            // Return the updated slot
-            // **Important**: Keep other properties like 'locked' status if needed, 
-            // but reset lock on manual change? Assuming we reset lock.
+            console.log(`Updated Slot ${definingSlotEntryId} to new ID ${newUniqueId}:`, { ...slot, entry: newEntry, value: newValue });
+            // Return the updated slot, reset lock status
             return { ...slot, entry: newEntry, value: newValue, locked: false }; 
           }
           // Return other slots unchanged

@@ -45,7 +45,7 @@ All notable changes to this project will be documented in this file.
 - **Locking**: Ensured auto-lock triggers correctly based on the recommended refresh action in `handleEvaluate`.
 - Control Panel: Addressed layout issues ensuring chart placeholder appears to the right, not underneath, on smaller screens (using Flexbox).
 - **Deployment**: Corrected Firebase Hosting public directory to `out` and removed SPA rewrite (`firebase.json`).
-- **Manual Quest Input**: Ensured selected rarity styling persists after confirming manual quest definition by updating the slot's entry ID correctly (`app/page.tsx`, `BountySlot.tsx`).
+- **Manual Quest Input**: Ensure manual definition assigns a new unique ID to the updated slot to prevent potential key conflicts (`app/page.tsx`).
 
 ### Removed
 - **Deployment**: Removed Netlify configuration files (`netlify.toml`, `.netlify/`).
